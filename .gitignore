@@ -1,0 +1,6 @@
+*lazy-lock.json
+*._*
+.config/alacritty/themes*
+*test*
+*.bak
+*.old
