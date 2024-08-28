@@ -60,9 +60,12 @@ zstyle ':fzf-tab:complete:cd:*' fzf-preview 'ls --color $realpath'
 zstyle ':fzf-tab:complete:__zoxide_z:*' fzf-preview 'ls --color $realpath'
 
 # Aliases
-alias ls='ls --color'
+#alias ls='ls --color'
+alias ls="eza --color=always --long --git --no-filesize --icons=always --no-time --no-user --no-permissions"
+alias cat='bat'
 alias vim='nvim'
 alias cc='clear'
+alias code='flatpak run com.visualstudio.code'
 
 # Shell integrations
 eval "$(fzf --zsh)"
@@ -72,3 +75,5 @@ export PYENV_ROOT="$HOME/.pyenv"
 command -v pyenv >/dev/null || export PATH="$PYENV_ROOT/bin:$PATH"
 eval "$(pyenv init -)"
 eval "$(pyenv virtualenv-init -)"
+
+eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
