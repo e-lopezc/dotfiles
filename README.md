@@ -1,34 +1,32 @@
-# My dotfiles
+# Dotfiles
 
-This directory contains the dotfiles for my system
+Personal dotfiles for **macOS** (daily driver) and **Linux** (occasional use).
 
-## Requirements
+## Layout
 
-Make sure you have installed the following packages in the system:
+Configs are split into shared and OS-specific folders:
 
-### Git
+| Path | Applies to | Symlinked to |
+|------|-----------|--------------|
+| `common/nvim/` | both | `~/.config/nvim` |
+| `macos/zshrc` | macOS | `~/.zshrc` |
+| `macos/ghostty/config` | macOS | `~/.config/ghostty/config` |
+| `linux/zshrc` | Linux | `~/.zshrc` |
+| `linux/kitty/` | Linux | `~/.config/kitty` |
+| `linux/wezterm.lua` | Linux | `~/.wezterm.lua` |
 
+The two shells differ on purpose: macOS uses **oh-my-zsh + spaceship**, Linux uses
+**zinit + oh-my-posh**. Neovim is shared across both.
+
+## Install
+
+```sh
+git clone git@github.com:e-lopezc/dotfiles.git ~/dotfiles
+cd ~/dotfiles
+./install.sh
 ```
-pacman -S git
-```
 
-### Stow
-
-```
-pacman -S stow
-```
-
-## Installation
-
-First, check out the dotfiles repo in your $HOME directory using git
-
-```
-$ git clone git@github.com/e-lopezc/dotfiles.git
-$ cd dotfiles
-```
-
-then use GNU stow to create symlinks
-
-```
-$ stow .
-```
+`install.sh` detects the OS with `uname` and symlinks the shared + matching
+OS-specific configs into place. Any existing real file at a target path is backed
+up to `<path>.bak` first. Since the installed configs are symlinks, edits made in
+this repo take effect immediately — no reinstall needed.

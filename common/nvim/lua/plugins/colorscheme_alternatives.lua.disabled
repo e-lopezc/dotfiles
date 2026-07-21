@@ -1,0 +1,41 @@
+-- Alternative color schemes you can try:
+
+-- Option 1: Gruvbox (current - warm orange on soft dark)
+-- return {
+--   "ellisonleao/gruvbox.nvim",
+--   config = function()
+--     require("gruvbox").setup({ contrast = "soft" })
+--     vim.cmd([[colorscheme gruvbox]])
+--   end,
+-- }
+
+-- Option 2: Kanagawa (soft dark with orange/amber)
+-- return {
+--   "rebelot/kanagawa.nvim",
+--   config = function()
+--     vim.cmd([[colorscheme kanagawa]])
+--   end,
+-- }
+
+-- Option 3: Melange (warm brownish dark with burnt orange)
+-- return {
+--   "savq/melange-nvim",
+--   config = function()
+--     vim.cmd([[colorscheme melange]])
+--   end,
+-- }
+
+-- Option 4: Catppuccin Mocha (warm with orange accents)
+-- return {
+--   "catppuccin/nvim",
+--   name = "catppuccin",
+--   config = function()
+--     require("catppuccin").setup({
+--       flavour = "mocha",
+--       color_overrides = {
+--         mocha = { peach = "#ff8800" }, -- more orange
+--       },
+--     })
+--     vim.cmd([[colorscheme catppuccin]])
+--   end,
+-- }
