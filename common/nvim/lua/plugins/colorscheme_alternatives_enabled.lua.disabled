@@ -1,0 +1,59 @@
+-- Alternative color schemes to try
+
+-- Current: Gruvbox with soft yellow strings
+-- Uncomment one to try it, then restart nvim
+
+-- Option 1: Kanagawa (soft, warm, harmonious - HIGHLY RECOMMENDED)
+-- return {
+--   "rebelot/kanagawa.nvim",
+--   lazy = false,
+--   priority = 1000,
+--   config = function()
+--     require("kanagawa").setup({
+--       theme = "wave", -- wave, dragon, lotus
+--       background = {
+--         dark = "wave",
+--       },
+--     })
+--     vim.cmd([[colorscheme kanagawa-wave]])
+--   end,
+-- }
+
+-- Option 2: Catppuccin Mocha (pastel, soft, warm)
+-- return {
+--   "catppuccin/nvim",
+--   name = "catppuccin",
+--   lazy = false,
+--   priority = 1000,
+--   config = function()
+--     require("catppuccin").setup({
+--       flavour = "mocha", -- mocha, frappe, macchiato
+--     })
+--     vim.cmd([[colorscheme catppuccin-mocha]])
+--   end,
+-- }
+
+-- Option 3: Zenbones (extremely muted, minimal)
+-- return {
+--   "mcchrish/zenbones.nvim",
+--   dependencies = { "rktjmp/lush.nvim" },
+--   lazy = false,
+--   priority = 1000,
+--   config = function()
+--     vim.opt.background = "dark"
+--     vim.cmd([[colorscheme zenbones]])
+--   end,
+-- }
+
+-- Option 4: OneDark (calm, desaturated)
+-- return {
+--   "navarasu/onedark.nvim",
+--   lazy = false,
+--   priority = 1000,
+--   config = function()
+--     require("onedark").setup({
+--       style = "warm", -- dark, darker, cool, deep, warm, warmer
+--     })
+--     require("onedark").load()
+--   end,
+-- }
