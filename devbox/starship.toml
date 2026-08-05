@@ -1,0 +1,64 @@
+# devbox starship prompt — DevOps/SRE oriented.
+# Shows directory, git, and context that matters in this box: the active
+# kubernetes context/namespace, AWS profile/region, and terraform workspace.
+
+add_newline = true
+command_timeout = 1000
+
+format = """
+[devbox](bold blue) \
+$directory\
+$git_branch\
+$git_status\
+$kubernetes\
+$aws\
+$terraform\
+$python\
+$cmd_duration\
+$line_break\
+$character"""
+
+[directory]
+truncation_length = 3
+truncate_to_repo = true
+style = "bold cyan"
+
+[git_branch]
+symbol = " "
+style = "bold purple"
+
+[git_status]
+style = "bold yellow"
+
+[character]
+success_symbol = "[➜](bold green)"
+error_symbol = "[➜](bold red)"
+
+# Enabled explicitly (starship disables these by default).
+[kubernetes]
+disabled = false
+symbol = "☸ "
+format = '[$symbol$context( \($namespace\))]($style) '
+style = "bold blue"
+
+[aws]
+disabled = false
+symbol = " "
+format = '[$symbol($profile )(\($region\) )]($style)'
+style = "bold yellow"
+
+[terraform]
+disabled = false
+symbol = "󱁢 "
+format = '[$symbol$workspace]($style) '
+style = "bold 105"
+
+[python]
+symbol = " "
+format = '[${symbol}${version}]($style) '
+style = "bold green"
+
+[cmd_duration]
+min_time = 2000
+format = "[ $duration]($style) "
+style = "bold yellow"

@@ -1,0 +1,97 @@
+#!/usr/bin/env bash
+# devbox — launch the portable DevOps/SRE tool container.
+#
+# The current directory becomes /workspace. The image carries the tools; this
+# script injects credentials at launch and NEVER bakes them in:
+#   - git over SSH via agent forwarding (your private key never enters the box)
+#   - AWS via `aws-vault exec` on the host (temporary STS creds as env vars)
+#   - kube config only when you ask for it (read-only)
+#
+# Usage:
+#   devbox                      # shell in $PWD
+#   devbox --kube               # + mount ~/.kube (read-only)
+#   devbox --aws PROFILE        # + inject temp AWS creds via aws-vault
+#   devbox --kube --aws prod    # combine
+#   devbox -- CMD [args...]     # run a one-off command instead of a shell
+#   devbox nvim .               # (bare command also works)
+#
+# Env overrides: DEVBOX_IMAGE (default devbox:latest), DEVBOX_SSH_SOCK.
+
+set -eo pipefail
+
+IMAGE="${DEVBOX_IMAGE:-devbox:latest}"
+
+usage() { sed -n '2,20p' "$0" | sed 's/^# \{0,1\}//'; }
+
+KUBE=0
+AWS_PROFILE=""
+CMD=()
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --kube)      KUBE=1; shift ;;
+    --aws)       AWS_PROFILE="${2:?--aws needs a profile name}"; shift 2 ;;
+    --aws=*)     AWS_PROFILE="${1#*=}"; shift ;;
+    -h|--help)   usage; exit 0 ;;
+    --)          shift; CMD+=("$@"); break ;;
+    *)           CMD+=("$1"); shift ;;
+  esac
+done
+
+if ! command -v docker >/dev/null 2>&1; then
+  echo "devbox: docker not found on PATH" >&2
+  exit 1
+fi
+
+if ! docker image inspect "$IMAGE" >/dev/null 2>&1; then
+  echo "devbox: image '$IMAGE' not found — build it first:" >&2
+  echo "        (cd <dotfiles>/devbox && make build)" >&2
+  exit 1
+fi
+
+ARGS=(run --rm --hostname devbox -w /workspace)
+# allocate a TTY only when attached to one, so `devbox -- cmd` works in scripts
+if [ -t 0 ] && [ -t 1 ]; then ARGS+=(-it); else ARGS+=(-i); fi
+ARGS+=(-e "TERM=${TERM:-xterm-256color}")
+ARGS+=(-v "$PWD:/workspace")
+
+# persisted, non-secret state
+ARGS+=(-v devbox-hist:/home/dev/.local/state/devbox)
+ARGS+=(-v devbox-uv-cache:/home/dev/.cache/uv)
+
+# git identity (not a secret; enables signed-authored commits)
+[ -f "$HOME/.gitconfig" ] && ARGS+=(-v "$HOME/.gitconfig:/home/dev/.gitconfig:ro")
+
+# --- SSH agent forwarding (OS-detected; key material never crosses) ----------
+case "$(uname -s)" in
+  Darwin) SSH_SOCK="${DEVBOX_SSH_SOCK:-/run/host-services/ssh-auth.sock}" ;;
+  *)      SSH_SOCK="${DEVBOX_SSH_SOCK:-$SSH_AUTH_SOCK}" ;;
+esac
+if [ -n "$SSH_SOCK" ]; then
+  ARGS+=(-v "$SSH_SOCK:/ssh-agent" -e "SSH_AUTH_SOCK=/ssh-agent")
+else
+  echo "devbox: no SSH agent socket found; git over SSH won't work this session" >&2
+fi
+
+# --- kube config (opt-in, read-only) -----------------------------------------
+if [ "$KUBE" = 1 ]; then
+  if [ -d "$HOME/.kube" ]; then
+    ARGS+=(-v "$HOME/.kube:/home/dev/.kube:ro")
+  else
+    echo "devbox: ~/.kube not found; skipping --kube" >&2
+  fi
+fi
+
+# --- AWS (temporary creds via aws-vault on the host) -------------------------
+if [ -n "$AWS_PROFILE" ]; then
+  if ! command -v aws-vault >/dev/null 2>&1; then
+    echo "devbox: --aws needs aws-vault on the host PATH" >&2
+    exit 1
+  fi
+  AWS_ENV=(-e AWS_ACCESS_KEY_ID -e AWS_SECRET_ACCESS_KEY -e AWS_SESSION_TOKEN \
+           -e AWS_SECURITY_TOKEN -e AWS_REGION -e AWS_DEFAULT_REGION)
+  exec aws-vault exec "$AWS_PROFILE" -- \
+    docker "${ARGS[@]}" "${AWS_ENV[@]}" "$IMAGE" ${CMD[@]+"${CMD[@]}"}
+fi
+
+exec docker "${ARGS[@]}" "$IMAGE" ${CMD[@]+"${CMD[@]}"}

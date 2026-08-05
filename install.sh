@@ -28,7 +28,8 @@ link() {
 }
 
 # --- shared (all machines) ---
-link "$DIR/common/nvim" "$HOME/.config/nvim"
+link "$DIR/common/nvim"      "$HOME/.config/nvim"
+link "$DIR/devbox/bin/devbox" "$HOME/.local/bin/devbox"
 
 # --- OS-specific ---
 case "$(uname -s)" in

@@ -8,6 +8,8 @@
 --   :CodeCompanion <prompt>  → inline
 return {
   "olimorris/codecompanion.nvim",
+  -- Disabled inside the devbox container (host Ollama isn't reachable there).
+  cond = vim.env.NVIM_CONTAINER ~= "1",
   dependencies = {
     "nvim-lua/plenary.nvim",
     "nvim-treesitter/nvim-treesitter",
