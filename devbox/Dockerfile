@@ -1,4 +1,4 @@
-# syntax=docker/dockerfile:1@sha256:81c49fca33a198248ed465a513acb25d3006b7c96898f95b41898ff034a41bb2
+# syntax=docker/dockerfile:1@sha256:ecfaec9ed6d810b56388c508f4121597bfbba70d41a6dfeee4d8cad5f295fc32
 #
 # devbox — a portable DevOps/SRE tool image.
 # Built per machine (see Makefile); carries the toolchain so the host OS does not
