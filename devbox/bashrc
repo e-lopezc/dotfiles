@@ -1,0 +1,85 @@
+# devbox container bashrc — lean, portable interactive shell.
+# Baked to /home/dev/.bashrc. Mirrors the useful bits of the host zsh setup
+# (aliases, fuzzy history, zoxide) without oh-my-zsh/zinit/pyenv/brew.
+
+# Only run for interactive shells.
+case $- in
+  *i*) ;;
+    *) return ;;
+esac
+
+# --- PATH --------------------------------------------------------------------
+export PATH="$HOME/.local/bin:/usr/local/bin:$PATH"
+
+# --- uv tool install (build-time dirs are root-owned; no sudo in this image) --
+export UV_TOOL_DIR="$HOME/.local/share/uv/tools"
+export UV_TOOL_BIN_DIR="$HOME/.local/bin"
+
+# --- editor ------------------------------------------------------------------
+export EDITOR=nvim
+export VISUAL=nvim
+
+# --- history (persisted via a named volume mounted by bin/devbox) ------------
+export HISTFILE="$HOME/.local/state/devbox/bash_history"
+mkdir -p "$(dirname "$HISTFILE")" 2>/dev/null || true
+HISTSIZE=5000
+HISTFILESIZE=10000
+HISTCONTROL=ignoreboth       # no dups, ignore leading-space commands
+shopt -s histappend
+shopt -s checkwinsize
+
+# --- aliases (from macos/zshrc) ----------------------------------------------
+alias ls="eza --color=always --icons=always --git --long --no-filesize --no-time --no-user --no-permissions"
+alias la="eza --all --long --color=always --git --icons=always"
+alias cat='bat'
+alias vim='nvim'
+alias v='nvim'
+
+# git
+alias g='git'
+alias gs='git status'
+alias ga='git add'
+alias gc='git commit'
+alias gp='git push'
+alias gpl='git pull'
+alias gco='git checkout'
+alias gb='git branch'
+alias gd='git diff'
+alias gl='git log --oneline'
+
+# kubernetes
+alias k='kubectl'
+
+# --- bash completion ---------------------------------------------------------
+if ! shopt -oq posix; then
+  if [ -f /usr/share/bash-completion/bash_completion ]; then
+    . /usr/share/bash-completion/bash_completion
+  elif [ -f /etc/bash_completion ]; then
+    . /etc/bash_completion
+  fi
+fi
+
+# per-tool completions (guarded; cheap enough at shell start)
+command -v kubectl    >/dev/null 2>&1 && source <(kubectl completion bash) && complete -o default -F __start_kubectl k
+command -v flux       >/dev/null 2>&1 && source <(flux completion bash)
+command -v helm       >/dev/null 2>&1 && source <(helm completion bash)
+command -v kustomize  >/dev/null 2>&1 && source <(kustomize completion bash)
+command -v gh         >/dev/null 2>&1 && source <(gh completion -s bash)
+command -v aws_completer >/dev/null 2>&1 && complete -C aws_completer aws
+
+# --- fzf (Ctrl-R history, Ctrl-T files) --------------------------------------
+if command -v fzf >/dev/null 2>&1; then
+  if fzf --bash >/dev/null 2>&1; then
+    eval "$(fzf --bash)"
+  else
+    [ -f /usr/share/doc/fzf/examples/key-bindings.bash ] && . /usr/share/doc/fzf/examples/key-bindings.bash
+    [ -f /usr/share/bash-completion/completions/fzf ] && . /usr/share/bash-completion/completions/fzf
+  fi
+fi
+
+# --- zoxide (replaces cd) ----------------------------------------------------
+command -v zoxide >/dev/null 2>&1 && eval "$(zoxide init bash --cmd cd)"
+
+# --- starship prompt ---------------------------------------------------------
+export STARSHIP_CONFIG="$HOME/.config/starship.toml"
+command -v starship >/dev/null 2>&1 && eval "$(starship init bash)"

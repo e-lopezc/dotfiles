@@ -8,6 +8,9 @@
 --   :CodeCompanion <prompt>  → inline
 return {
   "olimorris/codecompanion.nvim",
+  -- Excluded inside the devbox container (host Ollama isn't reachable there).
+  -- `enabled`, not `cond` — cond still clones the plugin, just skips loading it.
+  enabled = vim.env.NVIM_CONTAINER ~= "1",
   dependencies = {
     "nvim-lua/plenary.nvim",
     "nvim-treesitter/nvim-treesitter",

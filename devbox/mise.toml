@@ -1,0 +1,18 @@
+# Pinned tool versions for the devbox image. Bump a tool by editing its line
+# here and rebuilding — this is the only place versions live (see Dockerfile).
+# Each install is checksum-verified by mise's aqua backend against the
+# checksum file the tool's own release publishes.
+[tools]
+terraform    = "1.15.8"
+kubectl      = "1.36.3"
+helm         = "3.21.3"   # deliberately v3 — upstream is on v4.x now; that's a separate, deliberate upgrade
+flux2        = "2.9.4"    # bin: flux
+k9s          = "0.51.0"
+aws-cli      = "2.36.23"
+github-cli   = "2.97.0"   # bin: gh — moved off its old apt repo so every tool bumps the same way
+eza          = "0.23.5"
+zoxide       = "0.10.0"
+starship     = "1.26.0"
+uv           = "0.12.4"
+neovim       = "0.12.4"
+tree-sitter  = "0.26.12"  # bin: tree-sitter — required by nvim-treesitter (main branch) to build parsers
