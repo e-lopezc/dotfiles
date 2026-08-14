@@ -11,6 +11,10 @@ esac
 # --- PATH --------------------------------------------------------------------
 export PATH="$HOME/.local/bin:/usr/local/bin:$PATH"
 
+# --- uv tool install (build-time dirs are root-owned; no sudo in this image) --
+export UV_TOOL_DIR="$HOME/.local/share/uv/tools"
+export UV_TOOL_BIN_DIR="$HOME/.local/bin"
+
 # --- editor ------------------------------------------------------------------
 export EDITOR=nvim
 export VISUAL=nvim

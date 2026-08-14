@@ -10,23 +10,22 @@ return {
   config = function()
     require("mason").setup()
     require("mason-lspconfig").setup({
-      ensure_installed = { "pyright", "terraformls", "marksman" },
+      ensure_installed = { "terraformls", "marksman" },
       automatic_installation = true,
     })
 
-    -- Non-LSP tools managed by Mason, resolved via Mason's prepended PATH:
-    --   ruff/isort -> nvim-lint & conform
-    --   tree-sitter-cli -> required by nvim-treesitter (main branch) to build parsers
-    require("mason-tool-installer").setup({
-      ensure_installed = { "ruff", "isort", "tree-sitter-cli" },
-      run_on_start = true,
-    })
+    -- ruff and tree-sitter-cli are provisioned outside Mason: ruff via
+    -- `uv tool install` (Dockerfile) so it's also on $PATH in a plain shell,
+    -- tree-sitter-cli via mise (mise.toml) as a native binary.
 
     local capabilities = require("cmp_nvim_lsp").default_capabilities()
 
     -- Configure servers using the new vim.lsp.config API
-    vim.lsp.config("pyright", {
-      cmd = { "pyright-langserver", "--stdio" },
+    -- ruff server replaces pyright: lint + format + import-sort + diagnostics
+    -- in one binary. No type inference — that's a deliberate trade for a
+    -- lighter box, not an oversight.
+    vim.lsp.config("ruff", {
+      cmd = { "ruff", "server" },
       capabilities = capabilities,
       root_markers = { "pyproject.toml", "setup.py", ".git" },
     })
@@ -43,8 +42,10 @@ return {
       root_markers = { ".git" },
     })
 
-    -- Servers are auto-enabled and attached by mason-lspconfig's
-    -- `automatic_enable` (default on), using the vim.lsp.config definitions above.
+    -- terraformls/marksman are auto-enabled by mason-lspconfig's
+    -- `automatic_enable` (default on), since they're in ensure_installed above.
+    -- ruff isn't Mason-managed, so it needs an explicit enable.
+    vim.lsp.enable("ruff")
 
     -- Keymaps
     vim.api.nvim_create_autocmd("LspAttach", {

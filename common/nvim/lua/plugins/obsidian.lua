@@ -1,8 +1,9 @@
 -- Obsidian integration (community fork - actively maintained)
 return {
   "obsidian-nvim/obsidian.nvim",
-  -- Disabled inside the devbox container (no vault there); host is unaffected.
-  cond = vim.env.NVIM_CONTAINER ~= "1",
+  -- Excluded inside the devbox container (no vault there); host is unaffected.
+  -- `enabled`, not `cond` — cond still clones the plugin, just skips loading it.
+  enabled = vim.env.NVIM_CONTAINER ~= "1",
   version = "*",
   lazy = true,
   ft = "markdown",

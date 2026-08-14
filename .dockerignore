@@ -1,0 +1,9 @@
+# devbox's build context is the repo root (see devbox/Makefile). Deny-all +
+# explicit re-include, so a future top-level directory can't silently enter
+# the image build context.
+*
+!common/nvim/
+!devbox/bashrc
+!devbox/starship.toml
+!devbox/bake.lua
+!devbox/mise.toml

@@ -1,12 +1,14 @@
-# syntax=docker/dockerfile:1
+# syntax=docker/dockerfile:1@sha256:81c49fca33a198248ed465a513acb25d3006b7c96898f95b41898ff034a41bb2
 #
 # devbox — a portable DevOps/SRE tool image.
 # Built per machine (see Makefile); carries the toolchain so the host OS does not
-# matter. Runs on linux/amd64 and linux/arm64 — every download resolves its arch
-# at build time. NO credentials are baked in; secrets are injected at launch by
-# bin/devbox.
+# matter. Runs on linux/amd64 and linux/arm64. NO credentials are baked in;
+# secrets are injected at launch by bin/devbox.
+#
+# Tool versions are pinned in mise.toml (COPY'd in below), not hardcoded here —
+# bump a version by editing that file, not this one.
 
-FROM debian:trixie-slim
+FROM debian:trixie-slim@sha256:3a39a0592364683e6bab97937b72cad5a8fa6dcbbee90edb3bb48c7f8e94f258
 
 # Match the invoking user's UID/GID so bind-mounted files aren't root-owned on
 # Linux (the Makefile passes these). Harmless on macOS/OrbStack.
@@ -14,13 +16,12 @@ ARG USER_UID=1000
 ARG USER_GID=1000
 ARG USERNAME=dev
 
-# Where the baked Neovim config comes from, and a cache-bust knob (see Makefile).
-ARG DOTFILES_REPO=https://github.com/e-lopezc/dotfiles.git
-ARG DOTFILES_REF=main
-ARG DOTFILES_CACHEBUST=0
-
-# Which Neovim channel to bake: "stable" or "nightly" (both are moving release tags).
-ARG NVIM_RELEASE=stable
+# mise itself is the one thing in this image still pinned by hand — it's the
+# bootstrap for every other tool's version. Checksums are from mise's own
+# upstream SHASUMS256.txt (github.com/jdx/mise/releases/<ver>).
+ARG MISE_VERSION=v2026.8.5
+ARG MISE_SHA256_AMD64=ee362b6d96c648e27325a8bc7ee866bde4fffc20c88c777c5eb5c3b5c6f3e226
+ARG MISE_SHA256_ARM64=d2bde76b1f87ab50b6f456e05332bb02de56a6bf3c5d19343cc3661e5d294681
 
 ENV DEBIAN_FRONTEND=noninteractive \
     LANG=C.UTF-8 \
@@ -29,160 +30,90 @@ ENV DEBIAN_FRONTEND=noninteractive \
     UV_PYTHON_INSTALL_DIR=/opt/uv/python \
     UV_TOOL_DIR=/opt/uv/tools \
     UV_TOOL_BIN_DIR=/usr/local/bin \
-    PATH=/usr/local/sbin:/usr/local/bin:/home/dev/.local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+    MISE_DATA_DIR=/opt/mise \
+    MISE_GLOBAL_CONFIG_FILE=/opt/devbox/mise.toml \
+    PATH=/opt/mise/shims:/usr/local/sbin:/usr/local/bin:/home/dev/.local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
-# --- base packages -----------------------------------------------------------
+# --- base packages -------------------------------------------------------------
+# unzip/tar/xz-utils stay: mise's own bootstrap needs system tar, and none of
+# these three carry any version-maintenance burden of their own. No sudo (see
+# below), no wget/gnupg/lsb-release/python3 — nothing left in this image calls
+# them (see mise.toml for what replaced their old purpose).
 RUN set -eux; \
     apt-get update; \
     apt-get install -y --no-install-recommends \
-        ca-certificates curl wget gnupg lsb-release \
-        git openssh-client sudo less passwd adduser \
+        ca-certificates curl \
+        git openssh-client less passwd adduser \
         bash-completion \
         ripgrep fzf tmux jq unzip tar xz-utils \
-        python3 python3-pip python3-venv \
         bat \
         build-essential; \
     ln -sf /usr/bin/batcat /usr/local/bin/bat; \
     rm -rf /var/lib/apt/lists/*
 
-# --- non-root user -----------------------------------------------------------
+# --- non-root user ---------------------------------------------------------------
+# No sudoers entry — the launcher runs the container with --cap-drop ALL
+# --security-opt no-new-privileges, which breaks setuid sudo anyway.
 RUN set -eux; \
     groupadd --gid "${USER_GID}" "${USERNAME}" 2>/dev/null || true; \
-    useradd --uid "${USER_UID}" --gid "${USER_GID}" --create-home --shell /bin/bash "${USERNAME}"; \
-    echo "${USERNAME} ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/"${USERNAME}"; \
-    chmod 0440 /etc/sudoers.d/"${USERNAME}"
+    useradd --uid "${USER_UID}" --gid "${USER_GID}" --create-home --shell /bin/bash "${USERNAME}"
 
-# --- terraform (direct release binary — codename-independent, arch-aware) -----
+# --- mise (checksum-verified bootstrap; everything else pins via mise.toml) ----
 RUN set -eux; \
     ARCH="$(dpkg --print-architecture)"; \
-    TF_VER="$(curl -fsSL https://checkpoint-api.hashicorp.com/v1/check/terraform | jq -r '.current_version')"; \
-    curl -fsSL -o /tmp/tf.zip "https://releases.hashicorp.com/terraform/${TF_VER}/terraform_${TF_VER}_linux_${ARCH}.zip"; \
-    unzip -o /tmp/tf.zip -d /usr/local/bin; \
-    rm -f /tmp/tf.zip; \
-    terraform version
+    case "${ARCH}" in amd64) MARCH=x64; MSUM="${MISE_SHA256_AMD64}" ;; \
+                       arm64) MARCH=arm64; MSUM="${MISE_SHA256_ARM64}" ;; \
+                       *) echo "unsupported arch: ${ARCH}" >&2; exit 1 ;; esac; \
+    curl -fsSL -o /usr/local/bin/mise \
+        "https://github.com/jdx/mise/releases/download/${MISE_VERSION}/mise-${MISE_VERSION}-linux-${MARCH}"; \
+    echo "${MSUM}  /usr/local/bin/mise" | sha256sum -c -; \
+    chmod +x /usr/local/bin/mise; \
+    mise --version
 
-# --- Node.js LTS (official tarball — codename-independent; needed by pyright) --
-RUN set -eux; \
-    ARCH="$(dpkg --print-architecture)"; \
-    case "${ARCH}" in amd64) NODE_ARCH=x64 ;; arm64) NODE_ARCH=arm64 ;; *) echo "unsupported arch: ${ARCH}" >&2; exit 1 ;; esac; \
-    NODE_VER="$(curl -fsSL https://nodejs.org/dist/index.json | jq -r '[.[] | select(.lts != false)][0].version')"; \
-    curl -fsSL -o /tmp/node.tar.xz "https://nodejs.org/dist/${NODE_VER}/node-${NODE_VER}-linux-${NODE_ARCH}.tar.xz"; \
-    tar -xJf /tmp/node.tar.xz -C /usr/local --strip-components=1; \
-    rm -f /tmp/node.tar.xz; \
-    node --version; npm --version
+COPY devbox/mise.toml /opt/devbox/mise.toml
 
-# --- Kubernetes / GitOps CLIs (arch-aware, latest) ---------------------------
+# aqua (mise's default backend for most of these tools) verifies each download
+# against upstream-published checksums itself — that's the whole reason this
+# replaces 12 separate hand-rolled curl/verify blocks.
 RUN set -eux; \
-    ARCH="$(dpkg --print-architecture)"; \
-    # kubectl
-    KVER="$(curl -fsSL https://dl.k8s.io/release/stable.txt)"; \
-    curl -fsSL -o /usr/local/bin/kubectl "https://dl.k8s.io/release/${KVER}/bin/linux/${ARCH}/kubectl"; \
-    chmod +x /usr/local/bin/kubectl; \
-    # helm
-    curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash; \
-    # kustomize (tags are prefixed "kustomize/vX"; resolve the latest via the API)
-    KTAG="$(curl -fsSL https://api.github.com/repos/kubernetes-sigs/kustomize/releases | jq -r '[.[] | select(.tag_name | startswith("kustomize/"))][0].tag_name')"; \
-    KVER2="${KTAG#kustomize/}"; \
-    curl -fsSL -o /tmp/kustomize.tgz "https://github.com/kubernetes-sigs/kustomize/releases/download/${KTAG}/kustomize_${KVER2}_linux_${ARCH}.tar.gz"; \
-    tar -xzf /tmp/kustomize.tgz -C /usr/local/bin kustomize; \
-    rm -f /tmp/kustomize.tgz; \
-    # flux
-    curl -fsSL https://fluxcd.io/install.sh | bash; \
-    # k9s
-    curl -fsSL -o /tmp/k9s.tgz "https://github.com/derailed/k9s/releases/latest/download/k9s_linux_${ARCH}.tar.gz"; \
-    tar -xzf /tmp/k9s.tgz -C /usr/local/bin k9s; \
-    rm -f /tmp/k9s.tgz; \
-    ( kubectl version --client; helm version; kustomize version; flux --version; k9s version ) || true
+    cd /opt/devbox; \
+    mise trust mise.toml; \
+    mise install --yes; \
+    chmod -R a+rX /opt/mise; \
+    mise exec -- sh -c 'terraform version; kubectl version --client; helm version --short; \
+        flux --version; k9s version -s; aws --version; gh --version; \
+        eza --version; zoxide --version; starship --version; uv --version; \
+        nvim --version | head -1; tree-sitter --version'
 
-# --- AWS toolkit: awscli v2 + aws-vault (arch-aware) -------------------------
+# --- uv-managed Python tooling (uv itself comes from mise, see mise.toml) ------
 RUN set -eux; \
-    ARCH="$(dpkg --print-architecture)"; \
-    UNAME_M="$(uname -m)"; \
-    curl -fsSL -o /tmp/awscliv2.zip "https://awscli.amazonaws.com/awscli-exe-linux-${UNAME_M}.zip"; \
-    unzip -q /tmp/awscliv2.zip -d /tmp; \
-    /tmp/aws/install; \
-    rm -rf /tmp/awscliv2.zip /tmp/aws; \
-    curl -fsSL -o /usr/local/bin/aws-vault "https://github.com/99designs/aws-vault/releases/latest/download/aws-vault-linux-${ARCH}"; \
-    chmod +x /usr/local/bin/aws-vault; \
-    aws --version; aws-vault --version
-
-# --- GitHub CLI (apt repo — the "stable main" suite is codename-independent) --
-RUN set -eux; \
-    install -m 0755 -d /etc/apt/keyrings; \
-    curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
-        -o /etc/apt/keyrings/githubcli.gpg; \
-    chmod a+r /etc/apt/keyrings/githubcli.gpg; \
-    echo "deb [signed-by=/etc/apt/keyrings/githubcli.gpg] https://cli.github.com/packages stable main" \
-        > /etc/apt/sources.list.d/github-cli.list; \
-    apt-get update; \
-    apt-get install -y --no-install-recommends gh; \
-    rm -rf /var/lib/apt/lists/*
-
-# --- shell niceties: eza, zoxide, starship (arch-aware, latest) --------------
-RUN set -eux; \
-    UNAME_M="$(uname -m)"; \
-    # eza
-    curl -fsSL -o /tmp/eza.tgz "https://github.com/eza-community/eza/releases/latest/download/eza_${UNAME_M}-unknown-linux-gnu.tar.gz"; \
-    tar -xzf /tmp/eza.tgz -C /usr/local/bin; \
-    chmod +x /usr/local/bin/eza; \
-    rm -f /tmp/eza.tgz; \
-    # zoxide (installs to /usr/local/bin)
-    curl -fsSL https://raw.githubusercontent.com/ajeetdsouza/zoxide/main/install.sh | bash -s -- --bin-dir /usr/local/bin; \
-    # starship
-    curl -fsSL https://starship.rs/install.sh | sh -s -- --yes --bin-dir /usr/local/bin; \
-    eza --version; zoxide --version; starship --version
-
-# --- uv + managed Python 3.13 + ansible --------------------------------------
-RUN set -eux; \
-    curl -LsSf https://astral.sh/uv/install.sh | env UV_INSTALL_DIR=/usr/local/bin INSTALLER_NO_MODIFY_PATH=1 sh; \
     uv python install 3.13; \
-    # expose the uv-managed 3.13 as `python` (system python3 stays for tooling)
     ln -sf "$(uv python find 3.13)" /usr/local/bin/python; \
-    # ansible-core exposes the ansible/ansible-playbook/... CLIs; --with ansible
-    # pulls in the full community collection bundle alongside them.
-    uv tool install --python 3.13 --with ansible ansible-core; \
+    uv tool install --python 3.13 ansible-core; \
+    uv tool install --python 3.13 ruff; \
     chmod -R a+rX /opt/uv; \
-    uv --version; ansible --version
-
-# --- Neovim (recent release, arch-aware) -------------------------------------
-RUN set -eux; \
-    ARCH="$(dpkg --print-architecture)"; \
-    case "${ARCH}" in \
-        amd64) NV=x86_64 ;; \
-        arm64) NV=arm64 ;; \
-        *) echo "unsupported arch: ${ARCH}" >&2; exit 1 ;; \
-    esac; \
-    curl -fsSL -o /tmp/nvim.tgz "https://github.com/neovim/neovim/releases/download/${NVIM_RELEASE}/nvim-linux-${NV}.tar.gz"; \
-    tar -xzf /tmp/nvim.tgz -C /opt; \
-    ln -sf "/opt/nvim-linux-${NV}/bin/nvim" /usr/local/bin/nvim; \
-    rm -f /tmp/nvim.tgz; \
-    nvim --version | head -1
+    ansible --version; ruff --version
 
 # --- baked shell config ------------------------------------------------------
-COPY bashrc /home/dev/.bashrc
-COPY starship.toml /home/dev/.config/starship.toml
+COPY devbox/bashrc /home/dev/.bashrc
+COPY devbox/starship.toml /home/dev/.config/starship.toml
 
-# --- baked Neovim config (cloned from the public dotfiles repo) ---------------
-# DOTFILES_CACHEBUST busts the layer cache so a new push is picked up.
-RUN set -eux; \
-    echo "cachebust=${DOTFILES_CACHEBUST}"; \
-    git clone --depth 1 --branch "${DOTFILES_REF}" "${DOTFILES_REPO}" /tmp/dotfiles; \
-    mkdir -p /home/dev/.config; \
-    cp -r /tmp/dotfiles/common/nvim /home/dev/.config/nvim; \
-    rm -rf /tmp/dotfiles
+# --- baked Neovim config (copied from this checkout, not cloned) --------------
+COPY --chown=${USER_UID}:${USER_GID} common/nvim /home/dev/.config/nvim
 
-COPY bake.lua /opt/devbox/bake.lua
+COPY devbox/bake.lua /opt/devbox/bake.lua
 
 RUN chown -R "${USER_UID}:${USER_GID}" /home/dev /opt/uv
 
 # --- pre-bake nvim plugins + LSP servers + treesitter parsers (as dev) --------
-# Runs headless with NVIM_CONTAINER=1 so obsidian/codecompanion are skipped.
+# Runs headless with NVIM_CONTAINER=1 so obsidian/codecompanion are excluded
+# entirely (enabled = false, not just cond — they're never installed).
 # Tolerant (|| true): if the async Mason bake doesn't fully complete, first
 # launch finishes it — but with the ephemeral run model we try hard to bake now.
 USER dev
 ENV HOME=/home/dev
 RUN set -eux; \
-    nvim --headless "+Lazy! sync" +qa 2>&1 | tail -n 20 || true; \
+    nvim --headless "+Lazy! install" "+Lazy! restore" +qa 2>&1 | tail -n 20 || true; \
     timeout 900 nvim --headless -c "luafile /opt/devbox/bake.lua" 2>&1 | tail -n 40 || true
 
 WORKDIR /workspace

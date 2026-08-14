@@ -14,12 +14,10 @@ vim.wait(2000, function() return false end)
 
 -- 1) Mason: LSP servers + tools used by the config -------------------------------
 local mason_pkgs = {
-  "pyright",        -- python LSP (node)
   "terraform-ls",   -- terraform LSP
   "marksman",       -- markdown LSP
-  "ruff",           -- python linter/formatter (prebuilt binary)
-  "isort",          -- python import sorter (pip)
-  "tree-sitter-cli", -- required by nvim-treesitter (main branch)
+  -- ruff (LSP + linter/formatter) comes from `uv tool install`, not Mason —
+  -- see lsp.lua. tree-sitter-cli comes from mise (mise.toml).
 }
 
 local ok_registry, registry = pcall(require, "mason-registry")
@@ -50,6 +48,7 @@ end
 local parsers = {
   "python", "lua", "vim", "vimdoc",
   "markdown", "markdown_inline", "hcl", "terraform",
+  "dockerfile", "yaml",
 }
 local ok_ts, ts = pcall(require, "nvim-treesitter")
 if ok_ts then

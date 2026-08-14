@@ -1,23 +1,20 @@
 # devbox — build interface.
 # Day-to-day you use the `devbox` launcher (bin/devbox); this Makefile just
-# builds the image. Build context is this directory; the nvim config is cloned
-# from the dotfiles repo at build time, so the context stays tiny.
+# builds the image. The build context is the repo root (one level up from
+# this file) so the Dockerfile can COPY common/nvim directly — the image
+# bakes your local checkout, not a cloned ref.
 
-IMAGE         ?= devbox:latest
-DOTFILES_REPO ?= https://github.com/e-lopezc/dotfiles.git
-DOTFILES_REF  ?= main
+IMAGE ?= devbox:latest
+
+MK_DIR  := $(patsubst %/,%,$(dir $(abspath $(lastword $(MAKEFILE_LIST)))))
+CONTEXT := $(abspath $(MK_DIR)/..)
 
 USER_UID := $(shell id -u)
 USER_GID := $(shell id -g)
-# Bust the clone/bake layer only when the dotfiles ref actually moves.
-CACHEBUST := $(shell git ls-remote $(DOTFILES_REPO) $(DOTFILES_REF) 2>/dev/null | cut -f1)
 
 BUILD_ARGS := \
   --build-arg USER_UID=$(USER_UID) \
-  --build-arg USER_GID=$(USER_GID) \
-  --build-arg DOTFILES_REPO=$(DOTFILES_REPO) \
-  --build-arg DOTFILES_REF=$(DOTFILES_REF) \
-  --build-arg DOTFILES_CACHEBUST=$(CACHEBUST)
+  --build-arg USER_GID=$(USER_GID)
 
 .DEFAULT_GOAL := help
 
@@ -28,13 +25,16 @@ help: ## Show this help
 	  | awk 'BEGIN{FS=":.*?## "}{printf "  \033[36m%-9s\033[0m %s\n", $$1, $$2}'
 
 build: ## Build the image for this machine's arch
-	docker build $(BUILD_ARGS) -t $(IMAGE) .
+	@if [ -n "$$(git -C $(CONTEXT) status --porcelain -- common/nvim 2>/dev/null)" ]; then \
+	  echo "devbox: warning — common/nvim has uncommitted changes; the image will bake your working tree, not HEAD" >&2; \
+	fi
+	docker build $(BUILD_ARGS) -f $(MK_DIR)/Dockerfile -t $(IMAGE) $(CONTEXT)
 
 rebuild: ## Rebuild from scratch (no layer cache)
-	docker build --no-cache $(BUILD_ARGS) -t $(IMAGE) .
+	docker build --no-cache $(BUILD_ARGS) -f $(MK_DIR)/Dockerfile -t $(IMAGE) $(CONTEXT)
 
 shell: ## Open a shell in the container ($PWD -> /workspace)
-	./bin/devbox
+	$(MK_DIR)/bin/devbox
 
 clean: ## Remove the image and cache volumes
 	-docker image rm $(IMAGE)
